@@ -18,6 +18,9 @@
 
 package org.wso2.carbon.apimgt.api.model;
 
+import java.util.Arrays;
+import java.util.List;
+
 public class ApiTypeWrapper {
     private API api;
     private APIProduct apiProduct;
@@ -103,5 +106,26 @@ public class ApiTypeWrapper {
 
     public String getVisibility() {
         return isAPIProduct ? apiProduct.getVisibility() : api.getVisibility();
+    }
+
+    public String getUuid() {
+        return isAPIProduct ? apiProduct.getUuid() : api.getUuid();
+    }
+
+    public String getType() {
+        return isAPIProduct ? apiProduct.getType() : api.getType();
+    }
+
+    public String getVersion() {
+        return isAPIProduct ? apiProduct.getId().getVersion() : api.getId().getVersion();
+    }
+
+    public Boolean getIsDefaultVersion() {
+        return !isAPIProduct && api.isPublishedDefaultVersion();
+    }
+
+    public List<String> getTransports() {
+        return isAPIProduct ? Arrays.asList(apiProduct.getTransports().split(","))
+                : Arrays.asList(api.getTransports().split(","));
     }
 }

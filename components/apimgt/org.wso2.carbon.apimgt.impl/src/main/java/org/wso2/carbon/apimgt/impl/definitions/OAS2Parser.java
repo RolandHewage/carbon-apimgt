@@ -52,7 +52,6 @@ import io.swagger.parser.util.SwaggerDeserializationResult;
 import io.swagger.util.Json;
 import io.swagger.util.Yaml;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -64,11 +63,14 @@ import org.wso2.carbon.apimgt.api.ExceptionCodes;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.APIProduct;
 import org.wso2.carbon.apimgt.api.model.APIResourceMediationPolicy;
+import org.wso2.carbon.apimgt.api.model.ApiTypeWrapper;
 import org.wso2.carbon.apimgt.api.model.CORSConfiguration;
 import org.wso2.carbon.apimgt.api.model.Scope;
 import org.wso2.carbon.apimgt.api.model.SwaggerData;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
+import org.wso2.carbon.apimgt.api.model.endpointurlextractor.EndpointUrl;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.APIEndpointUrlExtractorImpl;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 
 import java.io.IOException;
@@ -88,6 +90,7 @@ import java.util.stream.Stream;
 
 import static org.wso2.carbon.apimgt.impl.APIConstants.APPLICATION_JSON_MEDIA_TYPE;
 import static org.wso2.carbon.apimgt.impl.APIConstants.APPLICATION_XML_MEDIA_TYPE;
+import static org.wso2.carbon.apimgt.impl.APIConstants.HTTPS_PROTOCOL;
 import static org.wso2.carbon.apimgt.impl.APIConstants.SWAGGER_APIM_DEFAULT_SECURITY;
 import static org.wso2.carbon.apimgt.impl.APIConstants.SWAGGER_APIM_RESTAPI_SECURITY;
 
@@ -1190,10 +1193,12 @@ public class OAS2Parser extends APIDefinition {
      * @param hostsWithSchemes GW hosts with protocol mapping
      * @param swagger          Swagger
      */
-    private void updateEndpoints(APIProduct product, Map<String, String> hostsWithSchemes, Swagger swagger) {
-        String basePath = product.getContext();
-        String transports = product.getTransports();
-        updateEndpoints(swagger, basePath, transports, hostsWithSchemes);
+    private void updateEndpoints(APIProduct product, Map<String, String> hostsWithSchemes, Swagger swagger)
+            throws APIManagementException {
+        ApiTypeWrapper apiTypeWrapper = new ApiTypeWrapper(product);
+        APIEndpointUrlExtractorImpl apiEndpointUrlExtractor = new APIEndpointUrlExtractorImpl();
+        List<EndpointUrl> endpointUrls = apiEndpointUrlExtractor.getApiEndpointUrls(apiTypeWrapper, hostsWithSchemes);
+        updateEndpoints(swagger, endpointUrls);
     }
 
     /**
@@ -1203,42 +1208,33 @@ public class OAS2Parser extends APIDefinition {
      * @param hostsWithSchemes  GW hosts with protocol mapping
      * @param swagger        Swagger
      */
-    private void updateEndpoints(API api, Map<String,String> hostsWithSchemes, Swagger swagger) {
-        String basePath = api.getContext();
-        String transports = api.getTransports();
-        updateEndpoints(swagger, basePath, transports, hostsWithSchemes);
+    private void updateEndpoints(API api, Map<String,String> hostsWithSchemes, Swagger swagger)
+            throws APIManagementException {
+        ApiTypeWrapper apiTypeWrapper = new ApiTypeWrapper(api);
+        APIEndpointUrlExtractorImpl apiEndpointUrlExtractor = new APIEndpointUrlExtractorImpl();
+        List<EndpointUrl> endpointUrls = apiEndpointUrlExtractor.getApiEndpointUrls(apiTypeWrapper, hostsWithSchemes);
+        updateEndpoints(swagger, endpointUrls);
     }
 
     /**
-     * Update OAS definition with GW endpoints and API information
+     * Update OAS definition with the API endpoint URLs
      *
-     * @param swagger        Swagger
-     * @param basePath       API context
-     * @param transports     transports types
-     * @param hostsWithSchemes GW hosts with protocol mapping
+     * @param swagger           Swagger
+     * @param endpointUrls      API context
      */
-    private void updateEndpoints(Swagger swagger, String basePath, String transports,
-                                 Map<String, String> hostsWithSchemes) {
-
-        String host = StringUtils.EMPTY;
-        String[] apiTransports = transports.split(",");
+    private void updateEndpoints(Swagger swagger, List<EndpointUrl> endpointUrls) {
         List<Scheme> schemes = new ArrayList<>();
-        if (ArrayUtils.contains(apiTransports, APIConstants.HTTPS_PROTOCOL)
-                && hostsWithSchemes.get(APIConstants.HTTPS_PROTOCOL) != null) {
-            schemes.add(Scheme.HTTPS);
-            host = hostsWithSchemes.get(APIConstants.HTTPS_PROTOCOL).trim()
-                    .replace(APIConstants.HTTPS_PROTOCOL_URL_PREFIX, "");
-        }
-        if (ArrayUtils.contains(apiTransports, APIConstants.HTTP_PROTOCOL)
-                && hostsWithSchemes.get(APIConstants.HTTP_PROTOCOL) != null) {
-            schemes.add(Scheme.HTTP);
-            if (StringUtils.isEmpty(host)) {
-                host = hostsWithSchemes.get(APIConstants.HTTP_PROTOCOL).trim()
-                        .replace(APIConstants.HTTP_PROTOCOL_URL_PREFIX, "");
+        String host = StringUtils.EMPTY;
+        String context = StringUtils.EMPTY;
+        for (EndpointUrl endpointUrl : endpointUrls) {
+            schemes.add(Scheme.valueOf(endpointUrl.getProtocol()));
+            if (StringUtils.equalsIgnoreCase(endpointUrl.getProtocol(), HTTPS_PROTOCOL)) {
+                host = endpointUrl.getHost();
+                context = endpointUrl.getContext();
             }
         }
         swagger.setSchemes(schemes);
-        swagger.setBasePath(basePath);
+        swagger.setBasePath(context);
         swagger.setHost(host);
     }
 

@@ -5295,7 +5295,9 @@ public class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
         api.setUriTemplates(oasParser.getURITemplates(definition));
         apiTenantDomain = MultitenantUtils.getTenantDomain(
                 APIUtil.replaceEmailDomainBack(api.getId().getProviderName()));
-        hostsWithSchemes = getHostWithSchemeMappingForEnvironment(api, apiTenantDomain, environmentName);
+        APIEndpointUrlExtractorImpl apiEndpointUrlExtractor = new APIEndpointUrlExtractorImpl();
+        hostsWithSchemes = apiEndpointUrlExtractor.
+                getHostWithSchemeMappingForEnvironment(new ApiTypeWrapper(api), apiTenantDomain, environmentName);
         api.setContext(getBasePath(apiTenantDomain, api.getContext()));
         updatedDefinition = oasParser.getOASDefinitionForStore(api, definition, hostsWithSchemes);
         return updatedDefinition;

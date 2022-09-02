@@ -18,11 +18,9 @@
  */
 
 package org.wso2.carbon.apimgt.impl.definitions;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import io.swagger.models.HttpMethod;
-import io.swagger.models.Path;
-import io.swagger.models.Swagger;
 import io.swagger.oas.inflector.examples.ExampleBuilder;
 import io.swagger.oas.inflector.examples.XmlExampleSerializer;
 import io.swagger.oas.inflector.examples.models.Example;
@@ -55,7 +53,6 @@ import io.swagger.v3.parser.core.models.ParseOptions;
 import io.swagger.v3.parser.core.models.SwaggerParseResult;
 import io.swagger.v3.parser.util.DeserializationUtils;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -68,11 +65,14 @@ import org.wso2.carbon.apimgt.api.ExceptionCodes;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.APIProduct;
 import org.wso2.carbon.apimgt.api.model.APIResourceMediationPolicy;
+import org.wso2.carbon.apimgt.api.model.ApiTypeWrapper;
 import org.wso2.carbon.apimgt.api.model.CORSConfiguration;
 import org.wso2.carbon.apimgt.api.model.Scope;
 import org.wso2.carbon.apimgt.api.model.SwaggerData;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
+import org.wso2.carbon.apimgt.api.model.endpointurlextractor.EndpointUrl;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.APIEndpointUrlExtractorImpl;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -89,7 +89,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.wso2.carbon.apimgt.impl.APIConstants.APPLICATION_JSON_MEDIA_TYPE;
-import static org.wso2.carbon.apimgt.impl.APIConstants.APPLICATION_XML_MEDIA_TYPE;
 
 /**
  * Models API definition using OAS (OpenAPI 3.0) parser
@@ -816,7 +815,8 @@ public class OAS3Parser extends APIDefinition {
      * @return OAS definition
      */
     @Override
-    public String getOASDefinitionForStore(API api, String oasDefinition, Map<String, String> hostsWithSchemes) {
+    public String getOASDefinitionForStore(API api, String oasDefinition, Map<String, String> hostsWithSchemes)
+            throws APIManagementException {
 
         OpenAPI openAPI = getOpenAPI(oasDefinition);
         updateOperations(openAPI);
@@ -834,7 +834,7 @@ public class OAS3Parser extends APIDefinition {
      */
     @Override
     public String getOASDefinitionForStore(APIProduct product, String oasDefinition,
-                                           Map<String, String> hostsWithSchemes) {
+                                           Map<String, String> hostsWithSchemes) throws APIManagementException {
 
         OpenAPI openAPI = getOpenAPI(oasDefinition);
         updateOperations(openAPI);
@@ -1238,11 +1238,12 @@ public class OAS3Parser extends APIDefinition {
      * @param hostsWithSchemes  GW hosts with protocol mapping
      * @param openAPI           OpenAPI
      */
-    private void updateEndpoints(APIProduct product, Map<String, String> hostsWithSchemes, OpenAPI openAPI) {
-
-        String basePath = product.getContext();
-        String transports = product.getTransports();
-        updateEndpoints(openAPI, basePath, transports, hostsWithSchemes);
+    private void updateEndpoints(APIProduct product, Map<String, String> hostsWithSchemes, OpenAPI openAPI)
+            throws APIManagementException {
+        ApiTypeWrapper apiTypeWrapper = new ApiTypeWrapper(product);
+        APIEndpointUrlExtractorImpl apiEndpointUrlExtractor = new APIEndpointUrlExtractorImpl();
+        List<EndpointUrl> endpointUrls = apiEndpointUrlExtractor.getApiEndpointUrls(apiTypeWrapper, hostsWithSchemes);
+        updateEndpoints(openAPI, endpointUrls);
     }
 
     /**
@@ -1252,42 +1253,25 @@ public class OAS3Parser extends APIDefinition {
      * @param hostsWithSchemes  GW hosts with protocol mapping
      * @param openAPI           OpenAPI
      */
-    private void updateEndpoints(API api, Map<String, String> hostsWithSchemes, OpenAPI openAPI) {
-
-        String basePath = api.getContext();
-        String transports = api.getTransports();
-        updateEndpoints(openAPI, basePath, transports, hostsWithSchemes);
+    private void updateEndpoints(API api, Map<String, String> hostsWithSchemes, OpenAPI openAPI)
+            throws APIManagementException {
+        ApiTypeWrapper apiTypeWrapper = new ApiTypeWrapper(api);
+        APIEndpointUrlExtractorImpl apiEndpointUrlExtractor = new APIEndpointUrlExtractorImpl();
+        List<EndpointUrl> endpointUrls = apiEndpointUrlExtractor.getApiEndpointUrls(apiTypeWrapper, hostsWithSchemes);
+        updateEndpoints(openAPI, endpointUrls);
     }
 
     /**
-     * Update OAS definition with GW endpoints and API information
+     * Update OAS definition with the API endpoint URLs
      *
      * @param openAPI          OpenAPI
-     * @param basePath         API context
-     * @param transports       transports types
-     * @param hostsWithSchemes GW hosts with protocol mapping
+     * @param endpointUrls     API context
      */
-    private void updateEndpoints(OpenAPI openAPI, String basePath, String transports,
-                                 Map<String, String> hostsWithSchemes) {
-
-        String[] apiTransports = transports.split(",");
+    private void updateEndpoints(OpenAPI openAPI, List<EndpointUrl> endpointUrls) {
         List<Server> servers = new ArrayList<>();
-        if (ArrayUtils.contains(apiTransports, APIConstants.HTTPS_PROTOCOL) && hostsWithSchemes
-                .containsKey(APIConstants.HTTPS_PROTOCOL)) {
-            String host = hostsWithSchemes.get(APIConstants.HTTPS_PROTOCOL).trim()
-                    .replace(APIConstants.HTTPS_PROTOCOL_URL_PREFIX, "");
-            String httpsURL = APIConstants.HTTPS_PROTOCOL + "://" + host + basePath;
+        for (EndpointUrl endpointUrl : endpointUrls) {
             Server httpsServer = new Server();
-            httpsServer.setUrl(httpsURL);
-            servers.add(httpsServer);
-        }
-        if (ArrayUtils.contains(apiTransports, APIConstants.HTTP_PROTOCOL) && hostsWithSchemes
-                .containsKey(APIConstants.HTTP_PROTOCOL)) {
-            String host = hostsWithSchemes.get(APIConstants.HTTP_PROTOCOL).trim()
-                    .replace(APIConstants.HTTP_PROTOCOL_URL_PREFIX, "");
-            String httpURL = APIConstants.HTTP_PROTOCOL + "://" + host + basePath;
-            Server httpsServer = new Server();
-            httpsServer.setUrl(httpURL);
+            httpsServer.setUrl(endpointUrl.getUrl());
             servers.add(httpsServer);
         }
         openAPI.setServers(servers);
