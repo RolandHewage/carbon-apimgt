@@ -36,6 +36,7 @@ import org.json.simple.parser.ParseException;
 import org.wso2.carbon.CarbonConstants;
 import org.wso2.carbon.apimgt.api.APIConsumer;
 import org.wso2.carbon.apimgt.api.APIDefinition;
+import org.wso2.carbon.apimgt.api.APIEndpointUrlExtractor;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.APIMgtResourceNotFoundException;
 import org.wso2.carbon.apimgt.api.ExceptionCodes;
@@ -5295,7 +5296,7 @@ public class APIConsumerImpl extends AbstractAPIManager implements APIConsumer {
         api.setUriTemplates(oasParser.getURITemplates(definition));
         apiTenantDomain = MultitenantUtils.getTenantDomain(
                 APIUtil.replaceEmailDomainBack(api.getId().getProviderName()));
-        APIEndpointUrlExtractorImpl apiEndpointUrlExtractor = new APIEndpointUrlExtractorImpl();
+        APIEndpointUrlExtractor apiEndpointUrlExtractor = APIEndpointUrlExtractorManager.getApiEndpointUrlExtractor();
         hostsWithSchemes = apiEndpointUrlExtractor.
                 getHostWithSchemeMappingForEnvironment(new ApiTypeWrapper(api), apiTenantDomain, environmentName);
         api.setContext(getBasePath(apiTenantDomain, api.getContext()));
